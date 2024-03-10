@@ -27,6 +27,8 @@
 
 static LIST_HEAD(device_list);
 
+struct rtnl_link_ops *wg_get_link_ops(void);
+
 static int wg_open(struct net_device *dev)
 {
 	struct in_device *dev_v4 = __in_dev_get_rtnl(dev);
@@ -345,6 +347,7 @@ static void wg_setup(struct net_device *dev)
 	const int overhead = MESSAGE_MINIMUM_LENGTH + sizeof(struct udphdr) +
 			     max(sizeof(struct ipv6hdr), sizeof(struct iphdr));
 
+	dev->rtnl_link_ops = wg_get_link_ops();
 	dev->netdev_ops = &netdev_ops;
 	dev->header_ops = &ip_tunnel_header_ops;
 	dev->hard_header_len = 0;
@@ -483,6 +486,11 @@ static struct rtnl_link_ops link_ops __read_mostly = {
 	.setup			= wg_setup,
 	.newlink		= wg_newlink,
 };
+
+struct rtnl_link_ops *wg_get_link_ops(void)
+{
+	return &link_ops;
+}
 
 static void wg_netns_pre_exit(struct net *net)
 {
