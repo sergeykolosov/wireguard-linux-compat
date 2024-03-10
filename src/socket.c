@@ -17,6 +17,9 @@
 #include <net/udp_tunnel.h>
 #include <net/ipv6.h>
 
+// https://github.com/torvalds/linux/commit/3ce9b35ff6de8dfebb0b0045e667c000f632e563
+#include <net/ip6_route.h>
+
 static int send4(struct wg_device *wg, struct sk_buff *skb,
 		 struct endpoint *endpoint, u8 ds, struct dst_cache *cache)
 {
@@ -195,7 +198,9 @@ int wg_socket_send_buffer_to_peer(struct wg_peer *peer, void *buffer,
 		return -ENOMEM;
 
 	skb_reserve(skb, SKB_HEADER_LEN);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 	skb_set_inner_network_header(skb, 0);
+#endif
 	skb_put_data(skb, buffer, len);
 	return wg_socket_send_skb_to_peer(peer, skb, ds);
 }
@@ -218,7 +223,9 @@ int wg_socket_send_buffer_as_reply_to_skb(struct wg_device *wg,
 	if (unlikely(!skb))
 		return -ENOMEM;
 	skb_reserve(skb, SKB_HEADER_LEN);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 	skb_set_inner_network_header(skb, 0);
+#endif
 	skb_put_data(skb, buffer, len);
 
 	if (endpoint.addr.sa_family == AF_INET)
@@ -335,7 +342,10 @@ static void sock_free(struct sock *sock)
 {
 	if (unlikely(!sock))
 		return;
+// https://github.com/torvalds/linux/commit/7cb0240492caea2f6467f827313478f41877e6ef
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0)
 	sk_clear_memalloc(sock);
+#endif
 	udp_tunnel_sock_release(sock->sk_socket);
 }
 
@@ -343,7 +353,10 @@ static void set_sock_opts(struct socket *sock)
 {
 	sock->sk->sk_allocation = GFP_ATOMIC;
 	sock->sk->sk_sndbuf = INT_MAX;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0)
 	sk_set_memalloc(sock->sk);
+#endif
 }
 
 int wg_socket_init(struct wg_device *wg, u16 port)

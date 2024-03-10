@@ -80,5 +80,7 @@ MODULE_DESCRIPTION("WireGuard secure network tunnel");
 MODULE_AUTHOR("Jason A. Donenfeld <Jason@zx2c4.com>");
 MODULE_VERSION(WIREGUARD_VERSION);
 MODULE_ALIAS_RTNL_LINK(KBUILD_MODNAME);
-MODULE_ALIAS_GENL_FAMILY(WG_GENL_NAME);
+// https://github.com/torvalds/linux/commit/e9412c37082b5c932e83364aaed0c38c2ce33acb
+// MODULE_ALIAS_GENL_FAMILY(WG_GENL_NAME);
+MODULE_ALIAS("net-pf-16-proto-16-family-" WG_GENL_NAME);
 MODULE_INFO(intree, "Y");

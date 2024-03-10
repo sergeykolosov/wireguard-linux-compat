@@ -8,7 +8,11 @@
 
 #include "messages.h"
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
 #include <linux/hashtable.h>
+#include <linux/types.h>
+#endif
+
 #include <linux/mutex.h>
 #include <linux/siphash.h>
 

@@ -96,8 +96,15 @@ static __init void horrible_allowedips_free(struct horrible_allowedips *table)
 {
 	struct horrible_allowedips_node *node;
 	struct hlist_node *h;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+	struct hlist_node *tmp;
+#endif
 
-	hlist_for_each_entry_safe(node, h, &table->head, table) {
+	hlist_for_each_entry_safe(node,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+			tmp,
+#endif
+			h, &table->head, table) {
 		hlist_del(&node->table);
 		kfree(node);
 	}
@@ -155,7 +162,15 @@ horrible_insert_ordered(struct horrible_allowedips *table, struct horrible_allow
 	struct horrible_allowedips_node *other = NULL, *where = NULL;
 	u8 my_cidr = horrible_mask_to_cidr(node->mask);
 
-	hlist_for_each_entry(other, &table->head, table) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+	struct hlist_node *tmp;
+#endif
+
+	hlist_for_each_entry(other,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+			tmp,
+#endif
+			&table->head, table) {
 		if (other->ip_version == node->ip_version &&
 		    !memcmp(&other->mask, &node->mask, sizeof(union nf_inet_addr)) &&
 		    !memcmp(&other->ip, &node->ip, sizeof(union nf_inet_addr))) {
@@ -164,7 +179,11 @@ horrible_insert_ordered(struct horrible_allowedips *table, struct horrible_allow
 			return;
 		}
 	}
-	hlist_for_each_entry(other, &table->head, table) {
+	hlist_for_each_entry(other,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+			tmp,
+#endif
+			&table->head, table) {
 		where = other;
 		if (horrible_mask_to_cidr(other->mask) <= my_cidr)
 			break;
@@ -215,8 +234,15 @@ static __init void *
 horrible_allowedips_lookup_v4(struct horrible_allowedips *table, struct in_addr *ip)
 {
 	struct horrible_allowedips_node *node;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+	struct hlist_node *tmp;
+#endif
 
-	hlist_for_each_entry(node, &table->head, table) {
+	hlist_for_each_entry(node,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+			tmp,
+#endif
+			&table->head, table) {
 		if (node->ip_version == 4 && horrible_match_v4(node, ip))
 			return node->value;
 	}
@@ -227,8 +253,15 @@ static __init void *
 horrible_allowedips_lookup_v6(struct horrible_allowedips *table, struct in6_addr *ip)
 {
 	struct horrible_allowedips_node *node;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+	struct hlist_node *tmp;
+#endif
 
-	hlist_for_each_entry(node, &table->head, table) {
+	hlist_for_each_entry(node,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+			tmp,
+#endif
+			&table->head, table) {
 		if (node->ip_version == 6 && horrible_match_v6(node, ip))
 			return node->value;
 	}
@@ -241,8 +274,15 @@ horrible_allowedips_remove_by_value(struct horrible_allowedips *table, void *val
 {
 	struct horrible_allowedips_node *node;
 	struct hlist_node *h;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+	struct hlist_node *tmp;
+#endif
 
-	hlist_for_each_entry_safe(node, h, &table->head, table) {
+	hlist_for_each_entry_safe(node,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+			tmp,
+#endif
+			h, &table->head, table) {
 		if (node->value != value)
 			continue;
 		hlist_del(&node->table);

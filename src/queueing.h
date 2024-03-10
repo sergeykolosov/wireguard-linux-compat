@@ -75,7 +75,10 @@ static inline bool wg_check_packet_protocol(struct sk_buff *skb)
 
 static inline void wg_reset_packet(struct sk_buff *skb, bool encapsulating)
 {
+// https://github.com/torvalds/linux/commit/c93bdd0e03e848555d144eb44a1f275b871a8dd5
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0)
 	const int pfmemalloc = skb->pfmemalloc;
+#endif
 	u32 hash = skb->hash;
 	u8 l4_hash = skb->l4_hash;
 	u8 sw_hash = skb->sw_hash;
@@ -84,7 +87,9 @@ static inline void wg_reset_packet(struct sk_buff *skb, bool encapsulating)
 	memset(&skb->headers_start, 0,
 	       offsetof(struct sk_buff, headers_end) -
 		       offsetof(struct sk_buff, headers_start));
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0)
 	skb->pfmemalloc = pfmemalloc;
+#endif
 	if (encapsulating) {
 		skb->hash = hash;
 		skb->l4_hash = l4_hash;
@@ -104,7 +109,9 @@ static inline void wg_reset_packet(struct sk_buff *skb, bool encapsulating)
 	skb_reset_network_header(skb);
 	skb_reset_transport_header(skb);
 	skb_probe_transport_header(skb);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 	skb_reset_inner_headers(skb);
+#endif
 }
 
 static inline int wg_cpumask_choose_online(int *stored_cpu, unsigned int id)

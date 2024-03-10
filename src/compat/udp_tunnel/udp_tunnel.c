@@ -136,6 +136,29 @@ static void __compat_fake_destructor(struct sk_buff *skb)
 {
 }
 
+// https://github.com/torvalds/linux/commit/aa0010f880ab542da3ad0e72992f2dc518ac68a0
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 8, 0)
+static inline void iptunnel_xmit(struct sk_buff *skb, struct net_device *dev)
+{
+	int err;
+	int pkt_len = skb->len - skb_transport_offset(skb);
+	struct pcpu_tstats *tstats = this_cpu_ptr(dev->tstats);
+
+	nf_reset(skb);
+
+	err = ip_local_out(skb);
+	if (likely(net_xmit_eval(err) == 0)) {
+		u64_stats_update_begin(&tstats->syncp);
+		tstats->tx_bytes += pkt_len;
+		tstats->tx_packets++;
+		u64_stats_update_end(&tstats->syncp);
+	} else {
+		dev->stats.tx_errors++;
+		dev->stats.tx_aborted_errors++;
+	}
+}
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0)
 static void __compat_iptunnel_xmit(struct rtable *rt, struct sk_buff *skb,
 		  __be32 src, __be32 dst, __u8 proto,
@@ -348,6 +371,30 @@ static void udp6_set_csum(bool nocheck, struct sk_buff *skb,
 			uh->check = CSUM_MANGLED_0;
 
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
+	}
+}
+#endif
+
+// https://github.com/torvalds/linux/commit/e8f72ea4a1380eeca10a551bc8d678e7d4388d42
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
+static inline void ip6tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
+{
+	struct net_device_stats *stats = &dev->stats;
+	int pkt_len, err;
+
+	nf_reset(skb);
+	pkt_len = skb->len;
+	err = ip6_local_out(skb);
+
+	if (net_xmit_eval(err) == 0) {
+		struct pcpu_tstats *tstats = this_cpu_ptr(dev->tstats);
+		u64_stats_update_begin(&tstats->syncp);
+		tstats->tx_bytes += pkt_len;
+		tstats->tx_packets++;
+		u64_stats_update_end(&tstats->syncp);
+	} else {
+		stats->tx_errors++;
+		stats->tx_aborted_errors++;
 	}
 }
 #endif

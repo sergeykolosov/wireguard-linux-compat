@@ -4,6 +4,9 @@
 
 ccflags-y := -D'pr_fmt(fmt)=KBUILD_MODNAME ": " fmt'
 ccflags-y += -Wframe-larger-than=2048
+ifeq ($(CONFIG_ARM),y)
+ccflags-y += -mlong-calls
+endif
 ccflags-$(CONFIG_WIREGUARD_DEBUG) += -DDEBUG -g
 ccflags-$(if $(WIREGUARD_VERSION),y,) += -D'WIREGUARD_VERSION="$(WIREGUARD_VERSION)"'
 

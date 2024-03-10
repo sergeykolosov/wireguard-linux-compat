@@ -219,8 +219,14 @@ static int wg_get_device_dump(struct sk_buff *skb, struct netlink_callback *cb)
 	mutex_lock(&wg->device_update_lock);
 	cb->seq = wg->device_update_gen;
 	next_peer_cursor = ctx->next_peer;
-
-	hdr = genlmsg_put(skb, NETLINK_CB(cb->skb).portid, cb->nlh->nlmsg_seq,
+	hdr = genlmsg_put(skb,
+// https://github.com/torvalds/linux/commit/15e473046cb6e5d18a4d0057e61d76315230382b
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
+			  NETLINK_CB(cb->skb).pid,
+#else
+			  NETLINK_CB(cb->skb).portid,
+#endif
+			  cb->nlh->nlmsg_seq,
 			  &genl_family, NLM_F_MULTI, WG_CMD_GET_DEVICE);
 	if (!hdr)
 		goto out;
@@ -513,7 +519,13 @@ static int wg_set_device(struct sk_buff *skb, struct genl_info *info)
 		struct net *net;
 		rcu_read_lock();
 		net = rcu_dereference(wg->creating_net);
+// https://github.com/torvalds/linux/commit/038e7332b8d4c0629a2965e3ede1a92e8e427bd6
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 		ret = !net || !ns_capable(net->user_ns, CAP_NET_ADMIN) ? -EPERM : 0;
+#else
+		ret = !net ? -EPERM : 0;
+		// TODO: verify security implications
+#endif
 		rcu_read_unlock();
 		if (ret)
 			goto out;
@@ -640,7 +652,9 @@ __ro_after_init = {
 	.name = WG_GENL_NAME,
 	.version = WG_GENL_VERSION,
 	.maxattr = WGDEVICE_A_MAX,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0)
 	.module = THIS_MODULE,
+#endif
 #ifndef COMPAT_CANNOT_INDIVIDUAL_NETLINK_OPS_POLICY
 	.policy = device_policy,
 #endif

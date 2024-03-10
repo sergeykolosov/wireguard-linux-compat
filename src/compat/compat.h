@@ -30,8 +30,8 @@
 #endif
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
-#error "WireGuard requires Linux >= 3.10"
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 4, 39)
+#error "WireGuard requires Linux >= 3.4.39"
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
@@ -64,8 +64,46 @@
 #endif
 #endif
 
+// https://github.com/woodsts/backports/blob/master/backport/backport-include/linux/compiler_attributes.h
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
+#include <linux/compiler_attributes.h>
+#endif
+
+#ifndef __has_attribute
+# define __has_attribute(x) __GCC4_has_attribute_##x
+#endif
+
+#ifndef __GCC4_has_attribute___fallthrough__
+# define __GCC4_has_attribute___fallthrough__         0
+#endif /* __GCC4_has_attribute___fallthrough__ */
+
+#ifndef fallthrough
+/*
+ * Add the pseudo keyword 'fallthrough' so case statement blocks
+ * must end with any of these keywords:
+ *   break;
+ *   fallthrough;
+ *   goto <label>;
+ *   return [expression];
+ *
+ *  gcc: https://gcc.gnu.org/onlinedocs/gcc/Statement-Attributes.html#Statement-Attributes
+ */
+#if __has_attribute(__fallthrough__)
+# define fallthrough                    __attribute__((__fallthrough__))
+#else
+# define fallthrough                    do {} while (0)  /* fallthrough */
+#endif
+#endif /* fallthrough */
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0)
 #include "udp_tunnel/udp_tunnel_partial_compat.h"
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
+#include <linux/list.h>
+// https://github.com/torvalds/linux/commit/6d7581e62f8be462440d7b22c6361f7c9fa4902b
+#define list_first_entry_or_null(ptr, type, member) \
+	(!list_empty(ptr) ? list_first_entry(ptr, type, member) : NULL)
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0) && !defined(DEBUG) && defined(net_dbg_ratelimited)
@@ -88,6 +126,32 @@
 #define ipv6_dst_lookup_flow(a, b, c, d) ipv6_dst_lookup_flow(b, c, d)
 #elif (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 5) && LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) || (LINUX_VERSION_CODE < KERNEL_VERSION(5, 3, 18) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0) && !defined(ISUBUNTU1904)) || (!defined(ISRHEL8) && !defined(ISDEBIAN) && !defined(ISUBUNTU1804) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 119) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)) || (LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 181) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)) || (LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 224) && LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)) || (LINUX_VERSION_CODE < KERNEL_VERSION(4, 4, 224) && !defined(ISUBUNTU1604) && !defined(ISRHEL7))
 #define ipv6_dst_lookup_flow(a, b, c, d) ipv6_dst_lookup(a, b, &dst, c) + (void *)0 ?: dst
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+// https://github.com/torvalds/linux/commit/3e4e4c1f2da66b29ee9379ca29f8dd620c2b5a1f
+#include <net/ipv6.h>
+static inline void ip6_flow_hdr(struct ipv6hdr *hdr, unsigned int tclass,
+				__be32 flowlabel)
+{
+	*(__be32 *)hdr = ntohl(0x60000000 | (tclass << 20)) | flowlabel;
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0) && LINUX_VERSION_CODE != KERNEL_VERSION(3, 4, 39)
+// https://github.com/torvalds/linux/commit/b7ef213ef65256168df83ddfbb8131ed9adc10f9
+#include <net/ipv6.h>
+static inline bool __ipv6_addr_needs_scope_id(int type)
+{
+	return type & IPV6_ADDR_LINKLOCAL ||
+	       (type & IPV6_ADDR_MULTICAST &&
+		(type & (IPV6_ADDR_LOOPBACK|IPV6_ADDR_LINKLOCAL)));
+}
+
+static inline __u32 ipv6_iface_scope_id(const struct in6_addr *addr, int iface)
+{
+	return __ipv6_addr_needs_scope_id(__ipv6_addr_type(addr)) ? iface : 0;
+}
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 12, 0) && IS_ENABLED(CONFIG_IPV6) && !defined(ISRHEL7)
@@ -124,6 +188,18 @@ static inline void skb_reset_tc(struct sk_buff *skb)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
 #include <linux/random.h>
 #include <linux/siphash.h>
+// https://github.com/woodsts/backports/commit/5c34a9c8909cf7534e1298993cae574b682b8d5a
+static inline unsigned int __compat_get_random_int(void)
+{
+	unsigned int r;
+	get_random_bytes(&r, sizeof(r));
+
+	return r;
+}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0) && LINUX_VERSION_CODE != KERNEL_VERSION(3, 4, 39)
+#define get_random_int __compat_get_random_int
+#endif
 static inline u32 __compat_get_random_u32(void)
 {
 	static siphash_key_t key;
@@ -142,12 +218,57 @@ static inline u32 __compat_get_random_u32(void)
 #define get_random_u32 __compat_get_random_u32
 #endif
 
+// https://github.com/torvalds/linux/commit/4b20db3de8dab005b07c74161cb041db8c5ff3a7
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 8, 0) && LINUX_VERSION_CODE != KERNEL_VERSION(3, 4, 39)
+static inline int __must_check kref_get_unless_zero(struct kref *kref)
+{
+	return atomic_add_unless(&kref->refcount, 1, 0);
+}
+#endif
+
+// https://github.com/torvalds/linux/commit/2e484610296b25f0a04b516bc144a00731d1d845
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0)
+#include <linux/scatterlist.h>
+static inline int sg_nents(struct scatterlist *sg)
+{
+	int nents;
+	for (nents = 0; sg; sg = sg_next(sg))
+		nents++;
+	return nents;
+}
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 18, 0) && !defined(ISRHEL7)
 static inline void netif_keep_dst(struct net_device *dev)
 {
 	dev->priv_flags &= ~IFF_XMIT_DST_RELEASE;
 }
 #define COMPAT_CANNOT_USE_CSUM_LEVEL
+#endif
+
+// https://github.com/torvalds/linux/commit/3a3bfb61e64476ff1e4ac3122cb6dec9c79b795c
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 5, 0)
+#include <linux/net.h>
+#ifndef net_ratelimited_function
+#define net_ratelimited_function(function, ...)			\
+do {													\
+	if (net_ratelimit())								\
+		function(__VA_ARGS__);							\
+} while (0)
+#define net_dbg_ratelimited(fmt, ...)				\
+	net_ratelimited_function(pr_debug, fmt, ##__VA_ARGS__)
+#endif
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 8, 0)
+#include <linux/u64_stats_sync.h>
+struct pcpu_tstats {
+	u64	rx_packets;
+	u64	rx_bytes;
+	u64	tx_packets;
+	u64	tx_bytes;
+	struct u64_stats_sync	syncp;
+};
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 14, 0) && !defined(ISRHEL7)
@@ -204,7 +325,9 @@ static inline void skb_scrub_packet(struct sk_buff *skb, bool xnet)
 	skb_dst_drop(skb);
 	secpath_reset(skb);
 	nf_reset(skb);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0)
 	nf_reset_trace(skb);
+#endif
 	if (!xnet)
 		return;
 	skb_orphan(skb);
@@ -216,6 +339,38 @@ static inline void skb_scrub_packet(struct sk_buff *skb, bool xnet)
 
 #if ((LINUX_VERSION_CODE < KERNEL_VERSION(3, 14, 0) && LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)) || LINUX_VERSION_CODE < KERNEL_VERSION(3, 12, 63)) && !defined(ISRHEL7)
 #include <linux/random.h>
+
+// https://github.com/mcgrof/backports/blob/master/backport/backport-include/linux/random.h
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 8, 0)
+#define prandom_u32()			random32()
+// https://github.com/mcgrof/backports/commit/40ab1bac8c3680d726ee31fbdb590584ae99756f
+static inline void __compat_prandom_bytes(void *buf, int bytes)
+{
+	unsigned char *p = buf;
+	int i;
+
+	for (i = 0; i < round_down(bytes, sizeof(u32)); i += sizeof(u32)) {
+		u32 random = random32();
+		int j;
+
+		for (j = 0; j < sizeof(u32); j++) {
+			p[i + j] = random;
+			random >>= BITS_PER_BYTE;
+		}
+	}
+
+	if (i < bytes) {
+		u32 random = random32();
+
+		for (; i < bytes; i++) {
+			p[i] = random;
+			random >>= BITS_PER_BYTE;
+		}
+	}
+}
+#define prandom_bytes __compat_prandom_bytes
+#endif
+
 static inline u32 __compat_prandom_u32_max(u32 ep_ro)
 {
 	return (u32)(((u64)prandom_u32() * ep_ro) >> 32);
@@ -225,6 +380,9 @@ static inline u32 __compat_prandom_u32_max(u32 ep_ro)
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 14, 0)
 #include <linux/kernel.h>
+#ifndef SIZE_MAX
+#define SIZE_MAX (~(size_t)0)
+#endif
 #ifndef U8_MAX
 #define U8_MAX ((u8)~0U)
 #endif
@@ -647,6 +805,13 @@ static inline int cpu_has_xfeatures(u64 xfeatures_needed, const char **feature_n
 #endif
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0) && defined(CONFIG_X86_64)
+#include <asm/cpufeature.h>
+#ifndef X86_FEATURE_ADX
+#define X86_FEATURE_ADX	( 9*32+19) /* ADCX and ADOX instructions */
+#endif
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 6, 0) && defined(CONFIG_X86_64)
 /* This is incredibly dumb and reckless, but as it turns out, there's
  * not really hardware Linux runs properly on that supports F but not BW
@@ -688,6 +853,10 @@ static inline void *skb_put_data(struct sk_buff *skb, const void *data, unsigned
 	memcpy(tmp, data, len);
 	return tmp;
 }
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
+#define NAPI_POLL_WEIGHT 64
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0) && !defined(ISRHEL7)
@@ -799,6 +968,57 @@ struct __kernel_timespec {
 #endif
 #endif
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+#include <linux/skbuff.h>
+#ifdef NET_SKBUFF_DATA_USES_OFFSET
+static inline bool skb_transport_header_was_set(const struct sk_buff *skb)
+{
+	return skb->transport_header != ~0U;
+}
+#else /* NET_SKBUFF_DATA_USES_OFFSET */
+static inline bool skb_transport_header_was_set(const struct sk_buff *skb)
+{
+	return skb->transport_header != NULL;
+}
+#endif /* NET_SKBUFF_DATA_USES_OFFSET */
+#endif
+
+// https://github.com/torvalds/linux/commit/bd8a7036c06cf15779b31a5397d4afcb12be81ea
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
+#include <linux/skbuff.h>
+static inline void kfree_skb_list(struct sk_buff *segs)
+{
+	while (segs) {
+		struct sk_buff *next = segs->next;
+
+		kfree_skb(segs);
+		segs = next;
+	}
+}
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
+#include <linux/skbuff.h>
+#include <net/flow_keys.h>
+static inline void skb_probe_transport_header(struct sk_buff *skb,
+					      const int offset_hint)
+{
+// https://github.com/torvalds/linux/commit/8ed781668dd49b608f1e67a22e3b445fd0c2cd6f
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0)
+	struct flow_keys keys;
+#endif
+
+	if (skb_transport_header_was_set(skb))
+		return;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 9, 0)
+	else if (skb_flow_dissect(skb, &keys))
+		skb_set_transport_header(skb, keys.thoff);
+#endif
+	else
+		skb_set_transport_header(skb, offset_hint);
+}
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0) && !defined(ISRHEL8)
 #include <linux/skbuff.h>
 #define skb_probe_transport_header(a) skb_probe_transport_header(a, 0)
@@ -846,6 +1066,33 @@ static inline void skb_mark_not_on_list(struct sk_buff *skb)
 	skb->next = NULL;
 }
 #endif
+
+// https://github.com/torvalds/linux/commit/eccc1bb8d4b4cf68d3c9becb083fa94ada7d495c
+// TODO: check if other changes are needed, given the full context of the above commit
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0)
+#include <net/inet_ecn.h>
+static inline int INET_ECN_decapsulate(struct sk_buff *skb,
+				       __u8 outer, __u8 inner)
+{
+	if (INET_ECN_is_not_ect(inner)) {
+		switch (outer & INET_ECN_MASK) {
+		case INET_ECN_NOT_ECT:
+			return 0;
+		case INET_ECN_ECT_0:
+		case INET_ECN_ECT_1:
+			return 1;
+		case INET_ECN_CE:
+			return 2;
+		}
+	}
+
+	if (INET_ECN_is_ce(outer))
+		INET_ECN_set_ce(skb);
+
+	return 0;
+}
+#endif
+
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 20, 0) && !defined(ISRHEL8)
 #include <net/netlink.h>

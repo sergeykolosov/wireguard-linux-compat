@@ -203,7 +203,9 @@ static bool encrypt_packet(struct sk_buff *skb, struct noise_keypair *keypair,
 	/* Only after checksumming can we safely add on the padding at the end
 	 * and the header.
 	 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 	skb_set_inner_network_header(skb, 0);
+#endif
 	header = (struct message_data *)skb_push(skb, sizeof(*header));
 	header->header.type = cpu_to_le32(MESSAGE_DATA);
 	header->key_idx = keypair->remote_index;

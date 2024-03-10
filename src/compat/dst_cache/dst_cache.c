@@ -25,7 +25,12 @@ static inline u32 rt6_get_cookie(const struct rt6_info *rt)
 }
 #endif
 #endif
+// https://github.com/torvalds/linux/commit/607ca46e97a1b6594b29647d98a32d545c24bdff
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
 #include <uapi/linux/in.h>
+#else
+#include <linux/in.h>
+#endif
 
 #ifndef COMPAT_HAS_DEFINED_DST_CACHE_PCPU
 struct dst_cache_pcpu {

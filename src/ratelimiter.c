@@ -29,7 +29,11 @@ static u64 init_refcnt; /* Protected by init_lock, hence not atomic. */
 static atomic_t total_entries = ATOMIC_INIT(0);
 static unsigned int max_entries, table_size;
 static void wg_ratelimiter_gc_entries(struct work_struct *);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
 static DECLARE_DEFERRABLE_WORK(gc_work, wg_ratelimiter_gc_entries);
+#else
+static DECLARE_DEFERRED_WORK(gc_work, wg_ratelimiter_gc_entries);
+#endif
 static struct hlist_head *table_v4;
 #if IS_ENABLED(CONFIG_IPV6)
 static struct hlist_head *table_v6;
@@ -69,17 +73,29 @@ static void wg_ratelimiter_gc_entries(struct work_struct *work)
 	const u64 now = ktime_get_coarse_boottime_ns();
 	struct ratelimiter_entry *entry;
 	struct hlist_node *temp;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+	struct hlist_node *node;
+#endif
+
 	unsigned int i;
 
 	for (i = 0; i < table_size; ++i) {
 		spin_lock(&table_lock);
-		hlist_for_each_entry_safe(entry, temp, &table_v4[i], hash) {
+		hlist_for_each_entry_safe(entry,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+				node,
+#endif
+				temp, &table_v4[i], hash) {
 			if (unlikely(!work) ||
 			    now - entry->last_time_ns > NSEC_PER_SEC)
 				entry_uninit(entry);
 		}
 #if IS_ENABLED(CONFIG_IPV6)
-		hlist_for_each_entry_safe(entry, temp, &table_v6[i], hash) {
+		hlist_for_each_entry_safe(entry,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+				node,
+#endif
+				temp, &table_v6[i], hash) {
 			if (unlikely(!work) ||
 			    now - entry->last_time_ns > NSEC_PER_SEC)
 				entry_uninit(entry);
@@ -102,6 +118,9 @@ bool wg_ratelimiter_allow(struct sk_buff *skb, struct net *net)
 	const u32 net_word = (unsigned long)net;
 	struct ratelimiter_entry *entry;
 	struct hlist_head *bucket;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+	struct hlist_node *node;
+#endif
 	u64 ip;
 
 	if (skb->protocol == htons(ETH_P_IP)) {
@@ -120,7 +139,11 @@ bool wg_ratelimiter_allow(struct sk_buff *skb, struct net *net)
 	else
 		return false;
 	rcu_read_lock();
-	hlist_for_each_entry_rcu(entry, bucket, hash) {
+	hlist_for_each_entry_rcu(entry,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+			node,
+#endif
+			bucket, hash) {
 		if (entry->net == net && entry->ip == ip) {
 			u64 now, tokens;
 			bool ret;

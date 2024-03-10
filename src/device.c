@@ -224,11 +224,83 @@ err:
 	return ret;
 }
 
+// https://github.com/torvalds/linux/commit/87b6d218f3adb00e6b58c7f96f8b5a74ff91abb4
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 5, 0)
+static struct net_device_stats *ipgre_get_stats(struct net_device *dev)
+{
+	struct pcpu_tstats sum = { 0 };
+	int i;
+
+	for_each_possible_cpu(i) {
+		const struct pcpu_tstats *tstats = per_cpu_ptr(dev->tstats, i);
+
+		sum.rx_packets += tstats->rx_packets;
+		sum.rx_bytes   += tstats->rx_bytes;
+		sum.tx_packets += tstats->tx_packets;
+		sum.tx_bytes   += tstats->tx_bytes;
+	}
+	dev->stats.rx_packets = sum.rx_packets;
+	dev->stats.rx_bytes   = sum.rx_bytes;
+	dev->stats.tx_packets = sum.tx_packets;
+	dev->stats.tx_bytes   = sum.tx_bytes;
+	return &dev->stats;
+}
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
+// https://github.com/torvalds/linux/commit/87b6d218f3adb00e6b58c7f96f8b5a74ff91abb4
+static struct rtnl_link_stats64 *ipgre_get_stats64(struct net_device *dev,
+						   struct rtnl_link_stats64 *tot)
+{
+	int i;
+
+	for_each_possible_cpu(i) {
+		const struct pcpu_tstats *tstats = per_cpu_ptr(dev->tstats, i);
+		u64 rx_packets, rx_bytes, tx_packets, tx_bytes;
+		unsigned int start;
+
+		do {
+			start = u64_stats_fetch_begin_bh(&tstats->syncp);
+			rx_packets = tstats->rx_packets;
+			tx_packets = tstats->tx_packets;
+			rx_bytes = tstats->rx_bytes;
+			tx_bytes = tstats->tx_bytes;
+		} while (u64_stats_fetch_retry_bh(&tstats->syncp, start));
+
+		tot->rx_packets += rx_packets;
+		tot->tx_packets += tx_packets;
+		tot->rx_bytes   += rx_bytes;
+		tot->tx_bytes   += tx_bytes;
+	}
+
+	tot->multicast = dev->stats.multicast;
+	tot->rx_crc_errors = dev->stats.rx_crc_errors;
+	tot->rx_fifo_errors = dev->stats.rx_fifo_errors;
+	tot->rx_length_errors = dev->stats.rx_length_errors;
+	tot->rx_frame_errors = dev->stats.rx_frame_errors;
+	tot->rx_errors = dev->stats.rx_errors;
+
+	tot->tx_fifo_errors = dev->stats.tx_fifo_errors;
+	tot->tx_carrier_errors = dev->stats.tx_carrier_errors;
+	tot->tx_dropped = dev->stats.tx_dropped;
+	tot->tx_aborted_errors = dev->stats.tx_aborted_errors;
+	tot->tx_errors = dev->stats.tx_errors;
+
+	return tot;
+}
+#endif
+
 static const struct net_device_ops netdev_ops = {
 	.ndo_open		= wg_open,
 	.ndo_stop		= wg_stop,
 	.ndo_start_xmit		= wg_xmit,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 5, 0)
+	// https://github.com/torvalds/linux/commit/87b6d218f3adb00e6b58c7f96f8b5a74ff91abb4
+	.ndo_get_stats		= ipgre_get_stats,
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
+	// https://github.com/torvalds/linux/commit/c54419321455631079c7d6e60bc732dd0c5914c5
+	.ndo_get_stats64	= ipgre_get_stats64,
+#else
 	.ndo_get_stats64	= ip_tunnel_get_stats64
+#endif
 };
 
 static void wg_destruct(struct net_device *dev)
@@ -289,7 +361,9 @@ static void wg_setup(struct net_device *dev)
 	dev->features |= NETIF_F_LLTX;
 	dev->features |= WG_NETDEV_FEATURES;
 	dev->hw_features |= WG_NETDEV_FEATURES;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 	dev->hw_enc_features |= WG_NETDEV_FEATURES;
+#endif
 	dev->mtu = ETH_DATA_LEN - overhead;
 #ifndef COMPAT_CANNOT_USE_MAX_MTU
 	dev->max_mtu = round_down(INT_MAX, MESSAGE_PADDING_MULTIPLE) - overhead;

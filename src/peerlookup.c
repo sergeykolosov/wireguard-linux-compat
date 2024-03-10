@@ -56,8 +56,18 @@ wg_pubkey_hashtable_lookup(struct pubkey_hashtable *table,
 {
 	struct wg_peer *iter_peer, *peer = NULL;
 
+// https://github.com/torvalds/linux/commit/b67bfe0d42cac56c512dd5da4b1b347a23f4b70a
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+	struct hlist_node *node;
+#endif
+
 	rcu_read_lock_bh();
-	hlist_for_each_entry_rcu_bh(iter_peer, pubkey_bucket(table, pubkey),
+	hlist_for_each_entry_rcu_bh(
+					iter_peer,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+					node,
+#endif
+					pubkey_bucket(table, pubkey),
 				    pubkey_hash) {
 		if (!memcmp(pubkey, iter_peer->handshake.remote_static,
 			    NOISE_PUBLIC_KEY_LEN)) {
@@ -121,6 +131,11 @@ __le32 wg_index_hashtable_insert(struct index_hashtable *table,
 {
 	struct index_hashtable_entry *existing_entry;
 
+// https://github.com/torvalds/linux/commit/b67bfe0d42cac56c512dd5da4b1b347a23f4b70a
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+	struct hlist_node *node;
+#endif
+
 	spin_lock_bh(&table->lock);
 	hlist_del_init_rcu(&entry->index_hash);
 	spin_unlock_bh(&table->lock);
@@ -131,6 +146,9 @@ search_unused_slot:
 	/* First we try to find an unused slot, randomly, while unlocked. */
 	entry->index = (__force __le32)get_random_u32();
 	hlist_for_each_entry_rcu_bh(existing_entry,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+					node,
+#endif
 				    index_bucket(table, entry->index),
 				    index_hash) {
 		if (existing_entry->index == entry->index)
@@ -143,6 +161,9 @@ search_unused_slot:
 	 */
 	spin_lock_bh(&table->lock);
 	hlist_for_each_entry_rcu_bh(existing_entry,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+					node,
+#endif
 				    index_bucket(table, entry->index),
 				    index_hash) {
 		if (existing_entry->index == entry->index) {
@@ -205,8 +226,17 @@ wg_index_hashtable_lookup(struct index_hashtable *table,
 {
 	struct index_hashtable_entry *iter_entry, *entry = NULL;
 
+// https://github.com/torvalds/linux/commit/b67bfe0d42cac56c512dd5da4b1b347a23f4b70a
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+	struct hlist_node *node;
+#endif
+
 	rcu_read_lock_bh();
-	hlist_for_each_entry_rcu_bh(iter_entry, index_bucket(table, index),
+	hlist_for_each_entry_rcu_bh(iter_entry,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+					node,
+#endif
+					index_bucket(table, index),
 				    index_hash) {
 		if (iter_entry->index == index) {
 			if (likely(iter_entry->type & type_mask))
